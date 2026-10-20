@@ -1,0 +1,26 @@
+{
+  "name": "poe-media-mcp",
+  "version": "1.0.0",
+  "description": "Local MCP server that lets Claude generate images, videos, speech and music through the Poe API",
+  "type": "module",
+  "bin": {
+    "poe-media-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3"
+  }
+}
