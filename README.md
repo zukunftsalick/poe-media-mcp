@@ -6,7 +6,7 @@ A local MCP server that lets Claude (Desktop or Code) generate **images, videos,
 
 | Tool | What it does | Default bot |
 |---|---|---|
-| `generate_image` | Text to image. Pass `reference_images` (local paths) to edit or remix pictures | `Seedream-4.0` |
+| `generate_image` | Text to image. Pass `reference_images` (local paths) to edit or remix pictures | `GPT-Image-2` |
 | `generate_video` | Text to video, or animate a `start_image` | `Veo-3` |
 | `generate_speech` | Text to speech | `ElevenLabs` |
 | `generate_music` | Text to music | `Lyria` |
@@ -81,7 +81,7 @@ Check it with `/mcp` inside Claude Code.
 |---|---|---|
 | `POE_API_KEY` | (required) | Your Poe API key |
 | `POE_OUTPUT_DIR` | `~/poe-media` | Where files are saved |
-| `POE_IMAGE_MODEL` | `Seedream-4.0` | Default image bot |
+| `POE_IMAGE_MODEL` | `GPT-Image-2` | Default image bot |
 | `POE_VIDEO_MODEL` | `Veo-3` | Default video bot |
 | `POE_SPEECH_MODEL` | `ElevenLabs` | Default speech bot |
 | `POE_MUSIC_MODEL` | `Lyria` | Default music bot |
@@ -96,8 +96,8 @@ Check it with `/mcp` inside Claude Code.
 - **Bot names are case‑sensitive** and Poe adds new ones often. If a call returns 404, run `list_poe_models` and copy the exact name.
 - **Bot options vary.** Poe passes `parameters` straight to the bot, but each bot names its options differently (`aspect_ratio`, `aspect`, `duration`…). The bot's page at `poe.com/<BotName>/api` lists them. If a bot rejects them (often a 400 "upstream gateway failure"), the server automatically retries once with them written as prompt flags (`--aspect 16:9`). If an option is silently ignored, try `prompt_flags` yourself.
 - **"Returned no downloadable media"** means the bot replied with text only (for example asking a clarifying question). The bot's reply is included so Claude can adjust and retry.
-- **Slow bots and timeouts.** Claude's MCP client gives up on a tool call after about a minute, but video bots and GPT-Image-1 often take longer. So each generation runs in the background: if it isn't done after 45 seconds, the tool returns a job id and Claude collects the result with `get_generation_result`. The file is saved either way.
-- **Aspect ratio, duration and voice** are sent as Poe prompt flags (`--aspect 16:9`, `--duration 8`, `--voice Rachel`), which bots honor more reliably than API parameters. GPT-Image-1 only supports 1:1, 3:2 and 2:3, so other ratios are snapped to the nearest one.
+- **Slow bots and timeouts.** Claude's MCP client gives up on a tool call after about a minute, but video bots and the GPT-Image models often take longer. So each generation runs in the background: if it isn't done after 45 seconds, the tool returns a job id and Claude collects the result with `get_generation_result`. The file is saved either way.
+- **Aspect ratio, duration and voice** are sent as Poe prompt flags (`--aspect 16:9`, `--duration 8`, `--voice Rachel`), which bots honor more reliably than API parameters. GPT-Image-1 only supports 1:1, 3:2 and 2:3, so other ratios are snapped to the nearest one there; GPT-Image-2 accepts wider ratios such as 16:9.
 - **Poe 500 errors** from upstream providers are retried once automatically. If they persist, try another bot.
 - **401** means a bad key, **402** means you're out of Poe points, **429** means rate limited.
 - Logs go to stderr (Claude Desktop shows them in its MCP log files); stdout is reserved for the MCP protocol.

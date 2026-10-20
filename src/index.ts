@@ -43,7 +43,7 @@ function definedOnly(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== ""));
 }
 
-// GPT-Image-1 only renders 1:1, 3:2 and 2:3, so snap any requested ratio to the nearest of those.
+// GPT-Image-1 (and -Mini) only render 1:1, 3:2 and 2:3, so snap any requested ratio to the nearest of those.
 function snapAspectForGptImage(aspect: string): string {
   const m = aspect.match(/^\s*(\d+(?:\.\d+)?)\s*[:x/]\s*(\d+(?:\.\d+)?)\s*$/);
   if (!m) return aspect;
@@ -58,7 +58,7 @@ function buildFlags(model: string, flags: RunArgs["flags"]): { text: string; not
   let note: string | undefined;
   if (flags?.aspect) {
     let aspect = flags.aspect.trim();
-    if (/gpt-image/i.test(model)) {
+    if (/gpt-image-1/i.test(model)) {
       const snapped = snapAspectForGptImage(aspect);
       if (snapped !== aspect) note = `${model} only supports 1:1, 3:2 and 2:3, so ${aspect} was sent as ${snapped}.`;
       aspect = snapped;
@@ -111,7 +111,7 @@ async function generate(args: RunArgs): Promise<CallToolResult> {
   }
 }
 
-// Slow generations (video, GPT-Image-1) can outlast the client's request timeout. Each one runs as a
+// Slow generations (video, GPT-Image models) can outlast the client's request timeout. Each one runs as a
 // background job: the tool waits up to POE_SYNC_WAIT_MS, then hands back a job id to collect later.
 interface Job {
   id: string;
@@ -174,10 +174,10 @@ server.registerTool(
   "generate_image",
   {
     title: "Generate image",
-    description: `Generate an image from a text prompt with a Poe image bot (default: ${config.models.image}; others include GPT-Image-1, FLUX-pro-1.1-ultra, Imagen-4-Ultra, Ideogram-v3, Nano-Banana). Pass reference_images to edit or remix existing pictures. Files are saved locally and their paths returned. Slow bots return a job_id; collect it with get_generation_result.`,
+    description: `Generate an image from a text prompt with a Poe image bot (default: ${config.models.image}; others include Seedream-4.0, GPT-Image-1, FLUX-pro-1.1-ultra, Imagen-4-Ultra, Ideogram-v3, Nano-Banana). Pass reference_images to edit or remix existing pictures. Files are saved locally and their paths returned. Slow bots return a job_id; collect it with get_generation_result.`,
     inputSchema: {
       prompt: z.string().min(1).describe("What to draw"),
-      model: z.string().optional().describe("Poe bot name, e.g. Seedream-4.0, GPT-Image-1, Imagen-4-Ultra, FLUX-pro-1.1-ultra"),
+      model: z.string().optional().describe("Poe bot name, e.g. GPT-Image-2, Seedream-4.0, Imagen-4-Ultra, FLUX-pro-1.1-ultra"),
       aspect_ratio: z.string().optional().describe("e.g. 1:1, 16:9, 9:16, 4:3"),
       reference_images: z.array(z.string()).optional().describe("Local image paths to edit or use as reference"),
       ...common,

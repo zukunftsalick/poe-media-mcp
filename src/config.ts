@@ -25,7 +25,7 @@ export const config = {
   // Images up to this size are also returned inline so Claude can look at them.
   inlineImageMaxBytes: envInt("POE_INLINE_IMAGE_MAX_BYTES", 750 * 1024),
   models: {
-    image: process.env.POE_IMAGE_MODEL ?? "Seedream-4.0",
+    image: process.env.POE_IMAGE_MODEL ?? "GPT-Image-2",
     video: process.env.POE_VIDEO_MODEL ?? "Veo-3",
     speech: process.env.POE_SPEECH_MODEL ?? "ElevenLabs",
     music: process.env.POE_MUSIC_MODEL ?? "Lyria",
