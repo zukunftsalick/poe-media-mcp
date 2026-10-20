@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -31,6 +32,8 @@ interface RunArgs {
   model: string;
   prompt: string;
   attachments?: string[];
+  /** Convenience options (aspect ratio, duration, voice). Sent as Poe prompt flags, which bots honor more reliably than API parameters. */
+  flags?: { aspect?: string; duration?: number; voice?: string };
   parameters?: Record<string, unknown>;
   prompt_flags?: string;
   output_dir?: string;
@@ -40,9 +43,37 @@ function definedOnly(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== ""));
 }
 
-async function run(args: RunArgs): Promise<CallToolResult> {
+// GPT-Image-1 only renders 1:1, 3:2 and 2:3, so snap any requested ratio to the nearest of those.
+function snapAspectForGptImage(aspect: string): string {
+  const m = aspect.match(/^\s*(\d+(?:\.\d+)?)\s*[:x/]\s*(\d+(?:\.\d+)?)\s*$/);
+  if (!m) return aspect;
+  const r = Number(m[1]) / Number(m[2]);
+  if (r > 1.2) return "3:2";
+  if (r < 1 / 1.2) return "2:3";
+  return "1:1";
+}
+
+function buildFlags(model: string, flags: RunArgs["flags"]): { text: string; note?: string } {
+  const parts: string[] = [];
+  let note: string | undefined;
+  if (flags?.aspect) {
+    let aspect = flags.aspect.trim();
+    if (/gpt-image/i.test(model)) {
+      const snapped = snapAspectForGptImage(aspect);
+      if (snapped !== aspect) note = `${model} only supports 1:1, 3:2 and 2:3, so ${aspect} was sent as ${snapped}.`;
+      aspect = snapped;
+    }
+    parts.push(`--aspect ${aspect}`);
+  }
+  if (flags?.duration) parts.push(`--duration ${flags.duration}`);
+  if (flags?.voice) parts.push(`--voice ${flags.voice}`);
+  return { text: parts.join(" "), note };
+}
+
+async function generate(args: RunArgs): Promise<CallToolResult> {
   try {
-    const prompt = args.prompt_flags ? `${args.prompt} ${args.prompt_flags}` : args.prompt;
+    const built = buildFlags(args.model, args.flags);
+    const prompt = [args.prompt, built.text, args.prompt_flags].filter(Boolean).join(" ");
     const parameters = definedOnly(args.parameters ?? {});
     const result = await callPoe({
       model: args.model,
@@ -61,7 +92,7 @@ async function run(args: RunArgs): Promise<CallToolResult> {
     } else {
       lines.push(`Poe bot "${args.model}" answered but returned no downloadable media.`);
     }
-    if (result.note) lines.push("", `Note: ${result.note}`);
+    for (const note of [built.note, result.note]) if (note) lines.push("", `Note: ${note}`);
     if (links.length) lines.push("", "Other links in the reply:", ...links.map((l) => `- ${l}`));
     if (errors.length) lines.push("", "Problems:", ...errors.map((e) => `- ${e}`));
     const botText = result.text.trim();
@@ -80,29 +111,89 @@ async function run(args: RunArgs): Promise<CallToolResult> {
   }
 }
 
+// Slow generations (video, GPT-Image-1) can outlast the client's request timeout. Each one runs as a
+// background job: the tool waits up to POE_SYNC_WAIT_MS, then hands back a job id to collect later.
+interface Job {
+  id: string;
+  model: string;
+  startedAt: number;
+  promise: Promise<CallToolResult>;
+  result?: CallToolResult;
+}
+const jobs = new Map<string, Job>();
+
+type Extra = {
+  _meta?: { progressToken?: string | number };
+  sendNotification: (n: any) => Promise<void>;
+};
+
+async function waitForJob(job: Job, extra: Extra): Promise<CallToolResult> {
+  const token = extra._meta?.progressToken;
+  const ticker =
+    token === undefined
+      ? undefined
+      : setInterval(() => {
+          const secs = Math.round((Date.now() - job.startedAt) / 1000);
+          extra
+            .sendNotification({
+              method: "notifications/progress",
+              params: { progressToken: token, progress: secs, message: `Waiting for ${job.model} (${secs}s)` },
+            })
+            .catch(() => {});
+        }, 5000);
+  try {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<undefined>((resolve) => (timer = setTimeout(() => resolve(undefined), config.syncWaitMs)));
+    const done = await Promise.race([job.promise, timeout]).finally(() => clearTimeout(timer));
+    if (done) {
+      jobs.delete(job.id);
+      return done;
+    }
+    const secs = Math.round((Date.now() - job.startedAt) / 1000);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${job.model} is still working after ${secs}s. The file will be saved when it finishes. Call get_generation_result with job_id "${job.id}" to collect it (wait a little between checks).`,
+        },
+      ],
+    };
+  } finally {
+    if (ticker) clearInterval(ticker);
+  }
+}
+
+function run(args: RunArgs, extra: Extra): Promise<CallToolResult> {
+  const job: Job = { id: randomUUID().slice(0, 8), model: args.model, startedAt: Date.now(), promise: generate(args) };
+  job.promise.then((r) => (job.result = r));
+  jobs.set(job.id, job);
+  return waitForJob(job, extra);
+}
+
 server.registerTool(
   "generate_image",
   {
     title: "Generate image",
-    description: `Generate an image from a text prompt with a Poe image bot (default: ${config.models.image}; others include FLUX-pro-1.1-ultra, Imagen-4-Ultra, Ideogram-v3, Seedream-4.0, Nano-Banana). Pass reference_images to edit or remix existing pictures. Files are saved locally and their paths returned.`,
+    description: `Generate an image from a text prompt with a Poe image bot (default: ${config.models.image}; others include GPT-Image-1, FLUX-pro-1.1-ultra, Imagen-4-Ultra, Ideogram-v3, Nano-Banana). Pass reference_images to edit or remix existing pictures. Files are saved locally and their paths returned. Slow bots return a job_id; collect it with get_generation_result.`,
     inputSchema: {
       prompt: z.string().min(1).describe("What to draw"),
-      model: z.string().optional().describe("Poe bot name, e.g. GPT-Image-1, Imagen-4-Ultra, FLUX-pro-1.1-ultra"),
+      model: z.string().optional().describe("Poe bot name, e.g. Seedream-4.0, GPT-Image-1, Imagen-4-Ultra, FLUX-pro-1.1-ultra"),
       aspect_ratio: z.string().optional().describe("e.g. 1:1, 16:9, 9:16, 4:3"),
       reference_images: z.array(z.string()).optional().describe("Local image paths to edit or use as reference"),
       ...common,
     },
   },
-  async (a) =>
+  async (a, extra) =>
     run({
       kind: "image",
       model: a.model ?? config.models.image,
       prompt: a.prompt,
       attachments: a.reference_images,
-      parameters: { aspect_ratio: a.aspect_ratio, ...a.parameters },
+      flags: { aspect: a.aspect_ratio },
+      parameters: a.parameters,
       prompt_flags: a.prompt_flags,
       output_dir: a.output_dir,
-    }),
+    }, extra),
 );
 
 server.registerTool(
@@ -119,16 +210,17 @@ server.registerTool(
       ...common,
     },
   },
-  async (a) =>
+  async (a, extra) =>
     run({
       kind: "video",
       model: a.model ?? config.models.video,
       prompt: a.prompt,
       attachments: a.start_image ? [a.start_image] : undefined,
-      parameters: { aspect_ratio: a.aspect_ratio, duration: a.duration_seconds, ...a.parameters },
+      flags: { aspect: a.aspect_ratio, duration: a.duration_seconds },
+      parameters: a.parameters,
       prompt_flags: a.prompt_flags,
       output_dir: a.output_dir,
-    }),
+    }, extra),
 );
 
 server.registerTool(
@@ -143,15 +235,16 @@ server.registerTool(
       ...common,
     },
   },
-  async (a) =>
+  async (a, extra) =>
     run({
       kind: "audio",
       model: a.model ?? config.models.speech,
       prompt: a.text,
-      parameters: { voice: a.voice, ...a.parameters },
+      flags: { voice: a.voice },
+      parameters: a.parameters,
       prompt_flags: a.prompt_flags,
       output_dir: a.output_dir,
-    }),
+    }, extra),
 );
 
 server.registerTool(
@@ -166,15 +259,16 @@ server.registerTool(
       ...common,
     },
   },
-  async (a) =>
+  async (a, extra) =>
     run({
       kind: "music",
       model: a.model ?? config.models.music,
       prompt: a.prompt,
-      parameters: { duration: a.duration_seconds, ...a.parameters },
+      flags: { duration: a.duration_seconds },
+      parameters: a.parameters,
       prompt_flags: a.prompt_flags,
       output_dir: a.output_dir,
-    }),
+    }, extra),
 );
 
 server.registerTool(
@@ -190,7 +284,7 @@ server.registerTool(
       ...common,
     },
   },
-  async (a) =>
+  async (a, extra) =>
     run({
       kind: "media",
       model: a.model,
@@ -199,7 +293,27 @@ server.registerTool(
       parameters: a.parameters,
       prompt_flags: a.prompt_flags,
       output_dir: a.output_dir,
-    }),
+    }, extra),
+);
+
+server.registerTool(
+  "get_generation_result",
+  {
+    title: "Get generation result",
+    description:
+      "Collect the result of a generation that was still running when its tool call returned. Pass the job_id from that message. Waits a while, then returns the saved files or says it is still running.",
+    inputSchema: { job_id: z.string().min(1) },
+  },
+  async ({ job_id }, extra): Promise<CallToolResult> => {
+    const job = jobs.get(job_id);
+    if (!job) {
+      return {
+        content: [{ type: "text", text: `No running job "${job_id}". It may already have been collected, or the server restarted.` }],
+        isError: true,
+      };
+    }
+    return waitForJob(job, extra);
+  },
 );
 
 server.registerTool(

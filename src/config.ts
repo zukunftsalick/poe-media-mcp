@@ -19,10 +19,13 @@ export const config = {
   baseUrl: (process.env.POE_BASE_URL ?? "https://api.poe.com/v1").replace(/\/+$/, ""),
   outputDir: path.resolve(expandHome(process.env.POE_OUTPUT_DIR ?? "~/poe-media")),
   timeoutMs: envInt("POE_TIMEOUT_MS", 10 * 60 * 1000),
+  // How long a tool call waits before handing back a job id (MCP clients time out around 60s).
+  retryDelayMs: envInt("POE_RETRY_DELAY_MS", 3000),
+  syncWaitMs: envInt("POE_SYNC_WAIT_MS", 45 * 1000),
   // Images up to this size are also returned inline so Claude can look at them.
   inlineImageMaxBytes: envInt("POE_INLINE_IMAGE_MAX_BYTES", 750 * 1024),
   models: {
-    image: process.env.POE_IMAGE_MODEL ?? "GPT-Image-1",
+    image: process.env.POE_IMAGE_MODEL ?? "Seedream-4.0",
     video: process.env.POE_VIDEO_MODEL ?? "Veo-3",
     speech: process.env.POE_SPEECH_MODEL ?? "ElevenLabs",
     music: process.env.POE_MUSIC_MODEL ?? "Lyria",
