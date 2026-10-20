@@ -17,6 +17,8 @@ export interface PoeCallResult {
   text: string;
   urls: string[];
   dataUrls: string[];
+  /** Set when the request had to be adjusted to succeed. */
+  note?: string;
 }
 
 export interface SavedFile {
@@ -155,23 +157,23 @@ function contentToText(content: unknown): string {
   return "";
 }
 
-export async function callPoe(opts: PoeCallOptions): Promise<PoeCallResult> {
-  const key = requireKey();
-  const body = {
-    ...(opts.parameters ?? {}),
-    model: opts.model,
-    stream: false, // Poe recommends non-streaming for media bots
-    messages: [{ role: "user", content: await buildMessageContent(opts.prompt, opts.attachments) }],
-  };
+/** Turns bot parameters into Poe chat-style flags, e.g. {aspect_ratio: "16:9"} -> "--aspect 16:9". */
+export function parametersToFlags(parameters: Record<string, unknown>): string {
+  const rename: Record<string, string> = { aspect_ratio: "aspect" };
+  return Object.entries(parameters)
+    .map(([k, v]) => `--${rename[k] ?? k} ${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(" ");
+}
 
-  let res: Response;
+async function postCompletion(body: unknown): Promise<{ ok: boolean; status: number; raw: string }> {
   try {
-    res = await fetch(`${config.baseUrl}/chat/completions`, {
+    const res = await fetch(`${config.baseUrl}/chat/completions`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${requireKey()}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(config.timeoutMs),
     });
+    return { ok: res.ok, status: res.status, raw: await res.text() };
   } catch (err) {
     if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
       throw new PoeError(
@@ -180,15 +182,36 @@ export async function callPoe(opts: PoeCallOptions): Promise<PoeCallResult> {
     }
     throw new PoeError(`Could not reach Poe: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
 
-  const raw = await res.text();
-  if (!res.ok) throw new PoeError(explainHttpError(res.status, raw));
+export async function callPoe(opts: PoeCallOptions): Promise<PoeCallResult> {
+  requireKey();
+  const parameters = opts.parameters ?? {};
+  const request = async (prompt: string, extra: Record<string, unknown>) =>
+    postCompletion({
+      ...extra,
+      model: opts.model,
+      stream: false, // Poe recommends non-streaming for media bots
+      messages: [{ role: "user", content: await buildMessageContent(prompt, opts.attachments) }],
+    });
+
+  let note: string | undefined;
+  let res = await request(opts.prompt, parameters);
+  // Many bots reject custom parameters over the OpenAI-compatible API (often as a 400
+  // "upstream gateway failure"). Retry once with the parameters written as prompt flags.
+  if (!res.ok && res.status === 400 && Object.keys(parameters).length) {
+    const flags = parametersToFlags(parameters);
+    const retry = await request(`${opts.prompt} ${flags}`, {});
+    if (retry.ok) note = `The bot rejected the parameters, so they were sent as prompt flags instead: ${flags}`;
+    res = retry;
+  }
+  if (!res.ok) throw new PoeError(explainHttpError(res.status, res.raw));
 
   let json: any;
   try {
-    json = JSON.parse(raw);
+    json = JSON.parse(res.raw);
   } catch {
-    throw new PoeError(`Poe returned a non-JSON response: ${raw.slice(0, 300)}`);
+    throw new PoeError(`Poe returned a non-JSON response: ${res.raw.slice(0, 300)}`);
   }
 
   const message = json?.choices?.[0]?.message ?? {};
@@ -197,7 +220,7 @@ export async function callPoe(opts: PoeCallOptions): Promise<PoeCallResult> {
   const all = new Set(urls);
   const { content: _ignored, ...rest } = message;
   collectUrlsDeep(rest, all);
-  return { text, urls: [...all], dataUrls };
+  return { text, urls: [...all], dataUrls, note };
 }
 
 function slugify(s: string): string {
