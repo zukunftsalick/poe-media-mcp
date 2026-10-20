@@ -61,6 +61,7 @@ async function run(args: RunArgs): Promise<CallToolResult> {
     } else {
       lines.push(`Poe bot "${args.model}" answered but returned no downloadable media.`);
     }
+    if (result.note) lines.push("", `Note: ${result.note}`);
     if (links.length) lines.push("", "Other links in the reply:", ...links.map((l) => `- ${l}`));
     if (errors.length) lines.push("", "Problems:", ...errors.map((e) => `- ${e}`));
     const botText = result.text.trim();

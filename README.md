@@ -91,7 +91,7 @@ Check it with `/mcp` inside Claude Code.
 ## Notes and troubleshooting
 
 - **Bot names are case‑sensitive** and Poe adds new ones often. If a call returns 404, run `list_poe_models` and copy the exact name.
-- **Bot options vary.** Poe passes `parameters` straight to the bot, but each bot names its options differently (`aspect_ratio`, `aspect`, `duration`…). The bot's page at `poe.com/<BotName>/api` lists them. If an option is ignored, try `prompt_flags` instead.
+- **Bot options vary.** Poe passes `parameters` straight to the bot, but each bot names its options differently (`aspect_ratio`, `aspect`, `duration`…). The bot's page at `poe.com/<BotName>/api` lists them. If a bot rejects them (often a 400 "upstream gateway failure"), the server automatically retries once with them written as prompt flags (`--aspect 16:9`). If an option is silently ignored, try `prompt_flags` yourself.
 - **"Returned no downloadable media"** means the bot replied with text only (for example asking a clarifying question). The bot's reply is included so Claude can adjust and retry.
 - **Video timeouts.** Video bots can take several minutes. Raise `POE_TIMEOUT_MS` if needed. Claude Desktop may also give up on very long calls; if that happens, use a faster bot such as `Veo-3-Fast`.
 - **401** means a bad key, **402** means you're out of Poe points, **429** means rate limited.
