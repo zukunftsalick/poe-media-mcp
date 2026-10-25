@@ -308,10 +308,10 @@ server.registerTool(
   "generate_image_gemini",
   {
     title: "Generate image with Gemini",
-    description: `Generate or edit an image directly through the Google Gemini API with your own key (default: ${config.gemini.imageModel}, i.e. Nano Banana Pro; also gemini-2.5-flash-image for cheap drafts, or imagen-4.0-ultra-generate-001 for text-to-image only). Pass reference_images (local paths) to edit pictures or keep a character consistent. Files are saved locally. Slow runs return a job_id; collect it with get_generation_result.`,
+    description: `Generate or edit an image directly through the Google Gemini API with your own key (default: ${config.gemini.imageModel}, i.e. Nano Banana Pro; also gemini-3.1-flash-image (Nano Banana 2) for cheaper drafts, or imagen-4.0-ultra-generate-001 for text-to-image only). Pass reference_images (local paths) to edit pictures or keep a character consistent. Files are saved locally. Slow runs return a job_id; collect it with get_generation_result.`,
     inputSchema: {
       prompt: z.string().min(1).describe("What to draw, or what to change in the reference images"),
-      model: z.string().optional().describe("Gemini model id, e.g. gemini-3-pro-image-preview, gemini-2.5-flash-image, imagen-4.0-ultra-generate-001"),
+      model: z.string().optional().describe("Gemini model id, e.g. gemini-3-pro-image, gemini-3.1-flash-image, imagen-4.0-ultra-generate-001"),
       aspect_ratio: z.string().optional().describe("1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9 or 21:9"),
       image_size: z.enum(["1K", "2K", "4K"]).optional().describe("Output resolution (Gemini 3 image models and Imagen). 4K costs more"),
       reference_images: z.array(z.string()).optional().describe("Local image paths to edit or use as reference (Gemini models only, up to 14)"),

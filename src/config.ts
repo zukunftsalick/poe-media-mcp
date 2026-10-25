@@ -27,8 +27,8 @@ export const config = {
   gemini: {
     apiKey: process.env.GEMINI_API_KEY?.trim() ?? "",
     baseUrl: (process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, ""),
-    // Nano Banana Pro. Others: gemini-2.5-flash-image (cheaper), imagen-4.0-ultra-generate-001.
-    imageModel: process.env.GEMINI_IMAGE_MODEL ?? "gemini-3-pro-image-preview",
+    // Nano Banana Pro. Others: gemini-3.1-flash-image (Nano Banana 2, cheaper), imagen-4.0-ultra-generate-001.
+    imageModel: process.env.GEMINI_IMAGE_MODEL ?? "gemini-3-pro-image",
   },
   models: {
     image: process.env.POE_IMAGE_MODEL ?? "GPT-Image-2",

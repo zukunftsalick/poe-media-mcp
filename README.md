@@ -13,7 +13,7 @@ A local MCP server that lets Claude (Desktop or Code) generate **images, videos,
 | `generate_with_poe_bot` | Any Poe bot by name, with optional file attachments | — |
 | `get_generation_result` | Collect a slow generation that was still running when its tool call returned | — |
 | `list_poe_models` | Look up exact bot names (e.g. search `veo`, `eleven`) | — |
-| `generate_image_gemini` | Text to image or image editing straight through the Google Gemini API with your own key (Nano Banana, Imagen). Pass `reference_images` to edit or keep a character consistent; `image_size` 1K/2K/4K | `gemini-3-pro-image-preview` |
+| `generate_image_gemini` | Text to image or image editing straight through the Google Gemini API with your own key (Nano Banana, Imagen). Pass `reference_images` to edit or keep a character consistent; `image_size` 1K/2K/4K | `gemini-3-pro-image` |
 | `list_gemini_models` | Look up the Gemini model ids your key can use | — |
 
 Every generation tool accepts `model` (any Poe bot name), `parameters` (bot‑specific options sent as Poe's `extra_body`, such as `{"aspect_ratio": "16:9"}`), `prompt_flags` (Poe chat‑style flags appended to the prompt, such as `--aspect 16:9`, for bots that ignore `parameters`) and `output_dir`.
@@ -97,7 +97,7 @@ Check it with `/mcp` inside Claude Code.
 | `POE_INLINE_IMAGE_MAX_BYTES` | `768000` | Largest image returned inline to Claude |
 | `POE_BASE_URL` | `https://api.poe.com/v1` | API endpoint (for testing) |
 | `GEMINI_API_KEY` | (optional) | Your Google Gemini API key, for the Gemini tools |
-| `GEMINI_IMAGE_MODEL` | `gemini-3-pro-image-preview` | Default Gemini image model |
+| `GEMINI_IMAGE_MODEL` | `gemini-3-pro-image` | Default Gemini image model |
 | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta` | Gemini endpoint (for testing) |
 
 ## Notes and troubleshooting
