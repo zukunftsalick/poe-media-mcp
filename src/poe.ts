@@ -197,6 +197,11 @@ export async function callPoe(opts: PoeCallOptions): Promise<PoeCallResult> {
 
   let note: string | undefined;
   let res = await request(opts.prompt, parameters);
+  // Poe's upstream providers return occasional 5xx errors; one retry after a short pause usually clears them.
+  if (res.status >= 500) {
+    await new Promise((r) => setTimeout(r, config.retryDelayMs));
+    res = await request(opts.prompt, parameters);
+  }
   // Many bots reject custom parameters over the OpenAI-compatible API (often as a 400
   // "upstream gateway failure"). Retry once with the parameters written as prompt flags.
   if (!res.ok && res.status === 400 && Object.keys(parameters).length) {
@@ -274,9 +279,18 @@ export async function saveOutputs(
   let index = 0;
 
   const write = async (buf: Buffer, mimeType: string, url?: string) => {
-    index += 1;
-    const file = path.join(dir, `${base}${index > 1 ? `_${index}` : ""}${extFor(mimeType, url, kind)}`);
-    await fs.writeFile(file, buf);
+    // Never overwrite an earlier file (two calls with the same prompt in the same second share a base name).
+    let file: string;
+    for (;;) {
+      index += 1;
+      file = path.join(dir, `${base}${index > 1 ? `_${index}` : ""}${extFor(mimeType, url, kind)}`);
+      try {
+        await fs.writeFile(file, buf, { flag: "wx" });
+        break;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      }
+    }
     files.push({ path: file, url, mimeType, bytes: buf.length });
   };
 
