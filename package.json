@@ -1,6 +1,6 @@
 {
   "name": "poe-media-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local MCP server that lets Claude generate images, videos, speech and music through the Poe API",
   "type": "module",
   "bin": {
